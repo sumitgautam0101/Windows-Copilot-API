@@ -218,6 +218,13 @@ timeout — so the exact break point is flaky and may vary between runs.
 
 ---
 
+## Troubleshooting
+
+**`RuntimeError: Copilot error: invalid-event` (or the chat hangs) on a server/VPS.**
+On datacenter IPs Cloudflare withholds bot-clearance, so the chat socket stalls on an empty challenge sometimes. **Fix it manually:** on that machine, open [copilot.microsoft.com](https://copilot.microsoft.com) in a browser and pass the "verify you're human" check once; that sets a `cf_clearance` cookie which the saved session reuses. Re-do it if it expires, or route the server's traffic through a residential connection (e.g. a home-PC exit node).
+
+---
+
 ## License
 
 For personal and educational use. You are responsible for complying with Microsoft's terms of service.
