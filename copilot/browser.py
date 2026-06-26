@@ -38,6 +38,7 @@ from urllib.parse import parse_qs, urlparse
 from playwright.sync_api import sync_playwright, Error as PlaywrightError
 
 from .auth import DEFAULT_AUTH_FILE, DEFAULT_PROFILE_DIR
+from .useragent import CHROME_UA
 
 COPILOT_URL = "https://copilot.microsoft.com/"
 
@@ -46,17 +47,14 @@ COPILOT_URL = "https://copilot.microsoft.com/"
 # We reach into that frame to click its checkbox — see _click_turnstile.
 _TURNSTILE_IFRAME = "iframe[src*='challenges.cloudflare.com'], iframe[src*='turnstile']"
 
-# A stock desktop Chrome UA used in headless mode. Headless Chromium otherwise
-# advertises "HeadlessChrome/..." in both the request UA header and
-# navigator.userAgent — a blatant bot signal to Cloudflare Turnstile, and a UA
-# that can mismatch the cf_clearance UA-binding the curl_cffi driver relies on
-# (clearance is bound to the UA that earned it). Pinning a normal Chrome UA makes
-# the session look ordinary and keeps the earned clearance reusable. Bump the
-# version occasionally to stay current.
-_STEALTH_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-)
+# The one UA every browser context advertises — the same string the curl_cffi
+# driver presents (see copilot/useragent.py). Applied to *both* headless and
+# visible launches so clearance earned by either is reusable by the driver:
+# cf_clearance is bound to the earning UA, so they must all match. It also hides
+# the "HeadlessChrome/..." token headless Chromium otherwise leaks (a blatant bot
+# tell). Because CHROME_UA tracks Playwright's bundled Chromium version, the
+# override doesn't contradict the browser's native Sec-CH-UA client hint.
+_STEALTH_UA = CHROME_UA
 
 # Injected into every frame to hide the residual automation tell that survives
 # --disable-blink-features=AutomationControlled in some Chromium builds.
@@ -189,10 +187,11 @@ class BrowserCopilot:
                 # switch; its presence is a cheap bot tell Turnstile reads.
                 ignore_default_args=["--enable-automation"],
             )
-            # Hide the "HeadlessChrome" UA only when actually headless; the visible
-            # window already uses a normal Chrome UA (and that path works today).
-            if self.headless:
-                launch_kwargs["user_agent"] = _STEALTH_UA
+            # Pin the UA on every launch, headless or visible. Both must earn
+            # cf_clearance under the exact string the curl_cffi driver replays;
+            # leaving the visible window on Playwright's native UA would bind the
+            # clearance to a version the driver doesn't present, re-gating chat.
+            launch_kwargs["user_agent"] = _STEALTH_UA
             if self.proxy:
                 launch_kwargs["proxy"] = self._parse_proxy(self.proxy)
             self._context = self._pw.chromium.launch_persistent_context(

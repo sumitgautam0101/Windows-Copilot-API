@@ -25,6 +25,7 @@ _CURL_SOCKET_BAD = -1
 from .challenges import solve_copilot_challenge, solve_hashcash
 from .models import AbstractProvider, Conversation, ImageResponse, ImageType
 from .protocol import CHAT_WEBSOCKET_URL, CONSENTS_FRAME, SET_OPTIONS_FRAME
+from .useragent import CHROME_CLIENT_HINTS, CHROME_UA, IMPERSONATE_TARGET
 from .utils import drain_json, is_accepted_format, raise_for_status, to_bytes
 
 
@@ -119,7 +120,13 @@ class Copilot(AbstractProvider):
         with Session(
             timeout=timeout,
             proxy=proxy,
-            impersonate="chrome",
+            # Pin the TLS/HTTP2 fingerprint, then override the UA + client hints so
+            # the wire presentation is a fixed Windows Chrome. cf_clearance is bound
+            # to the earning UA; the browsers that earn it present this same string,
+            # so the driver must too — otherwise every turn is gated behind a
+            # Cloudflare Turnstile. See copilot/useragent.py.
+            impersonate=IMPERSONATE_TARGET,
+            headers={"User-Agent": CHROME_UA, **CHROME_CLIENT_HINTS},
             cookies=cookies,
         ) as session:
             # Establish cookies + Cloudflare clearance (anonymous is fine).
